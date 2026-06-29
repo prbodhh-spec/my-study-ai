@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Study AI</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="logo">Study.AI</div>
+        <div class="actions">
+            <input type="file" id="file-selector" accept=".pdf" style="display: none;">
+            <label for="file-selector" class="btn-primary">Open PDF</label>
+        </div>
+    </header>
+
+    <main id="viewer-container"></main>
+
+    <button id="gemini-popup-btn">Ask Gemini ✨</button>
+
+    <div id="ai-sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <h3>Gemini Explanation</h3>
+            <button id="close-sidebar">&times;</button>
+        </div>
+        <div id="ai-response-content" class="sidebar-body">
+            Select some text and click "Ask Gemini" to see insights here...
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
