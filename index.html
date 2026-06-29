@@ -3,31 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minimal Study AI</title>
+    <title>Studio AI - Premium Reader</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Engines -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/blasten/turn.js@master/turn.min.js"></script>
 </head>
 <body>
 
+    <!-- Elite Workspace Header -->
     <header class="navbar">
-        <div class="logo">Study.AI</div>
+        <div class="brand">Studio<span>.AI</span></div>
+        
+        <div class="controls-center">
+            <button id="library-toggle-btn" class="nav-icon-btn">📚 My Library</button>
+            <button id="fullscreen-btn" class="nav-icon-btn">🎦 Fullscreen</button>
+        </div>
+
         <div class="actions">
             <input type="file" id="file-selector" accept=".pdf" style="display: none;">
-            <label for="file-selector" class="btn-primary">Open PDF</label>
+            <label for="file-selector" class="btn-primary">+ Add Book</label>
         </div>
     </header>
 
-    <main id="viewer-container"></main>
+    <!-- Sliding Library Shelf (Switch Books) -->
+    <div id="library-shelf" class="shelf">
+        <div class="shelf-header">
+            <h3>Your Book Shelf</h3>
+            <button id="close-shelf">&times;</button>
+        </div>
+        <div id="book-list" class="shelf-body">
+            <!-- Uploaded books dynamically stack here -->
+            <div class="empty-shelf-notice">Your library is empty. Upload PDFs using "+ Add Book" to populate your shelf!</div>
+        </div>
+    </div>
 
+    <!-- Main Dynamic Viewport -->
+    <main class="book-viewport">
+        <div id="magazine-wrapper">
+            <div id="magazine">
+                <!-- 3D Pages Render Here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Audio Engine -->
+    <audio id="flip-sound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav" preload="auto"></audio>
+
+    <!-- Context AI Bubble Trigger -->
     <button id="gemini-popup-btn">Ask Gemini ✨</button>
 
+    <!-- Glassmorphic Workspace Sidebar -->
     <div id="ai-sidebar" class="sidebar">
         <div class="sidebar-header">
-            <h3>Gemini Explanation</h3>
+            <h3>Gemini Assistant</h3>
             <button id="close-sidebar">&times;</button>
         </div>
         <div id="ai-response-content" class="sidebar-body">
-            Select some text and click "Ask Gemini" to see insights here...
+            Highlight text or complex formulas/questions from your document to generate AI explanations.
         </div>
     </div>
 
