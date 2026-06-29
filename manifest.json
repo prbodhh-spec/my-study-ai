@@ -1,0 +1,16 @@
+{
+  "name": "Studio AI Reader",
+  "short_name": "Studio AI",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f0f11",
+  "theme_color": "#0f0f11",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2232/2232688.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

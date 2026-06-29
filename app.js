@@ -1,190 +1,199 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// Elements
+// DOM Elements
 const fileSelector = document.getElementById('file-selector');
-const magazine = document.getElementById('magazine');
-const popupBtn = document.getElementById('gemini-popup-btn');
+const bookContainer = document.getElementById('book');
+const libraryDrawer = document.getElementById('library-drawer');
+const bookList = document.getElementById('book-list');
 const sidebar = document.getElementById('ai-sidebar');
-const closeSidebarBtn = document.getElementById('close-sidebar');
 const aiResponseContent = document.getElementById('ai-response-content');
+const popupBtn = document.getElementById('gemini-popup-btn');
 const flipSound = document.getElementById('flip-sound');
 
-const libraryShelf = document.getElementById('library-shelf');
-const libraryToggleBtn = document.getElementById('library-toggle-btn');
-const closeShelfBtn = document.getElementById('close-shelf');
-const bookListContainer = document.getElementById('book-list');
-const fullscreenBtn = document.getElementById('fullscreen-btn');
-
-let globalLibrary = {}; // Local structural storage to swap books instantly
+let pageFlipInstance = null;
 let currentSelectedText = "";
 
-// --- 1. MULTI-BOOK LIBRARY ARCHITECTURE ---
-fileSelector.addEventListener('change', function(e) {
+// Initialize Local Storage (IndexedDB)
+localforage.config({ name: 'StudioAI_Library' });
+
+// Load Library on App Start
+window.addEventListener('DOMContentLoaded', loadLibraryShelf);
+
+// --- 1. SAVING DATA TO YOUR DEVICE ---
+fileSelector.addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (file && file.type === "application/pdf") {
         const fileReader = new FileReader();
-        fileReader.onload = function() {
-            const typedarray = new Uint8Array(this.result);
+        fileReader.onload = async function() {
+            const arrayBuffer = this.result;
             const bookId = 'book_' + Date.now();
             
-            // Add to library runtime
-            globalLibrary[bookId] = {
+            // Save to browser's permanent database
+            await localforage.setItem(bookId, {
                 name: file.name,
-                data: typedarray
-            };
+                data: arrayBuffer
+            });
             
-            updateLibraryShelfUI();
-            loadBookEngine(bookId);
+            loadLibraryShelf();
+            renderBook(arrayBuffer);
         };
         fileReader.readAsArrayBuffer(file);
     }
 });
 
-function updateLibraryShelfUI() {
-    bookListContainer.innerHTML = '';
-    const keys = Object.keys(globalLibrary);
+async function loadLibraryShelf() {
+    bookList.innerHTML = '';
+    const keys = await localforage.keys();
     
-    if(keys.length === 0) {
-        bookListContainer.innerHTML = '<div class="empty-shelf-notice">Your library is empty.</div>';
+    if (keys.length === 0) {
+        bookList.innerHTML = '<p style="color:#888;">Shelf is empty.</p>';
         return;
     }
 
-    keys.forEach(key => {
+    for (let key of keys) {
+        const bookObj = await localforage.getItem(key);
         const card = document.createElement('div');
         card.className = 'book-card';
-        card.innerText = globalLibrary[key].name;
-        card.addEventListener('click', () => {
-            loadBookEngine(key);
-            libraryShelf.classList.remove('open');
-        });
-        bookListContainer.appendChild(card);
-    });
-}
-
-// --- 2. ENGINE LOADER & RENDER MASK ---
-async function loadBookEngine(bookId) {
-    if ($(magazine).turn('is')) {
-        $(magazine).turn('destroy');
-    }
-    magazine.innerHTML = '';
-    
-    // Add visual loading state animation
-    magazine.style.opacity = '0.5';
-
-    const targetBook = globalLibrary[bookId];
-    const pdf = await pdfjsLib.getDocument(targetBook.data).promise;
-    
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const pageFrame = document.createElement('div');
-        pageFrame.className = 'page-frame';
-        magazine.appendChild(pageFrame);
-
-        const page = await pdf.getPage(pageNum);
-        const desiredWidth = 525; // Adjusted to safely fit scaling profiles
-        const tempViewport = page.getViewport({ scale: 1 });
-        const scale = desiredWidth / tempViewport.width;
-        const viewport = page.getViewport({ scale: scale });
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        pageFrame.appendChild(canvas);
-
-        const textLayerDiv = document.createElement('div');
-        textLayerDiv.className = 'textLayer';
-        pageFrame.appendChild(textLayerDiv);
-
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-        const textContent = await page.getTextContent();
+        card.innerHTML = `<h3>📄 ${bookObj.name}</h3>`;
         
-        pdfjsLib.renderTextLayer({
-            textContentSource: textContent,
-            container: textLayerDiv,
-            viewport: viewport,
-            textDivs: []
+        // Open Book Event
+        card.addEventListener('click', () => {
+            renderBook(bookObj.data);
+            libraryDrawer.classList.remove('open');
+        });
+
+        // Delete Book Event
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-btn';
+        delBtn.innerText = 'Remove from device';
+        delBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await localforage.removeItem(key);
+            loadLibraryShelf();
+        };
+        
+        card.appendChild(delBtn);
+        bookList.appendChild(card);
+    }
+}
+
+// --- 2. THE 3D BOOK ENGINE (PageFlip) ---
+async function renderBook(pdfArrayBuffer) {
+    // Destroy previous book instance if exists
+    if (pageFlipInstance) { pageFlipInstance.destroy(); }
+    bookContainer.innerHTML = ''; 
+
+    const pdf = await pdfjsLib.getDocument(pdfArrayBuffer).promise;
+    const totalPages = pdf.numPages;
+
+    // Create pages in DOM
+    const pagesHTML = [];
+    
+    for (let i = 1; i <= totalPages; i++) {
+        const pageDiv = document.createElement('div');
+        pageDiv.className = 'page-wrapper';
+        
+        const canvas = document.createElement('canvas');
+        const textLayer = document.createElement('div');
+        textLayer.className = 'textLayer';
+
+        pageDiv.appendChild(canvas);
+        pageDiv.appendChild(textLayer);
+        bookContainer.appendChild(pageDiv);
+        pagesHTML.push(pageDiv);
+
+        // Render PDF to Canvas
+        pdf.getPage(i).then(page => {
+            const viewport = page.getViewport({ scale: 1.2 }); // Higher res
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            
+            page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport })
+            .promise.then(() => page.getTextContent())
+            .then(textContent => {
+                pdfjsLib.renderTextLayer({
+                    textContentSource: textContent, container: textLayer, viewport: viewport, textDivs: []
+                });
+            });
         });
     }
 
-    magazine.style.opacity = '1';
+    // Initialize the smooth 3D engine
+    pageFlipInstance = new St.PageFlip(bookContainer, {
+        width: 450, height: 600,
+        size: "fixed",
+        display: "double",
+        showCover: true,
+        maxShadowOpacity: 0.3
+    });
 
-    // Build 3D Core Layout
-    $(magazine).turn({
-        width: 1050,
-        height: 700,
-        autoCenter: true,
-        display: 'double',
-        duration: 800,
-        when: {
-            turning: function() {
-                flipSound.currentTime = 0;
-                flipSound.play().catch(() => {});
-            }
-        }
+    pageFlipInstance.loadFromHTML(document.querySelectorAll('.page-wrapper'));
+
+    // Sound effect trigger
+    pageFlipInstance.on('flip', (e) => {
+        flipSound.currentTime = 0;
+        flipSound.play().catch(()=>{});
     });
 }
 
-// --- 3. SELECTION EXTRACTION ---
-document.addEventListener('mouseup', (e) => {
-    const selection = window.getSelection();
-    const text = selection.toString().trim();
+// --- 3. GEMINI AI HIGHLIGHT INTEGRATION ---
 
-    if (text.length > 0) {
+// UI Toggles
+document.getElementById('toggle-library').onclick = () => libraryDrawer.classList.add('open');
+document.getElementById('close-library').onclick = () => libraryDrawer.classList.remove('open');
+document.getElementById('close-sidebar').onclick = () => sidebar.classList.remove('open');
+
+// Save API Key locally
+const keyInput = document.getElementById('gemini-key-input');
+document.getElementById('save-key-btn').onclick = () => {
+    if(keyInput.value) {
+        localStorage.setItem('gemini_key', keyInput.value);
+        keyInput.value = 'Saved Successfully!';
+        setTimeout(()=> keyInput.value = '', 2000);
+    }
+};
+
+// Track Text Selection
+document.addEventListener('mouseup', (e) => {
+    const text = window.getSelection().toString().trim();
+    if (text.length > 5) {
         currentSelectedText = text;
         popupBtn.style.display = 'block';
-        popupBtn.style.left = `${e.clientX + 10}px`;
-        popupBtn.style.top = `${e.clientY + 10}px`;
+        popupBtn.style.left = `${e.clientX + 15}px`;
+        popupBtn.style.top = `${e.clientY - 30}px`;
     } else if (e.target !== popupBtn) {
         popupBtn.style.display = 'none';
     }
 });
 
-// --- 4. INTEGRATED GEMINI ASSISTANT API ---
+// Call Gemini
 popupBtn.addEventListener('click', async () => {
     popupBtn.style.display = 'none';
     sidebar.classList.add('open');
-    aiResponseContent.innerHTML = "<em>Analyzing selected passage...</em>";
+    aiResponseContent.innerHTML = "<em style='color:#a8b2d1;'>Scanning and analyzing text...</em>";
 
-    let apiKey = sessionStorage.getItem('gemini_api_key');
+    const apiKey = localStorage.getItem('gemini_key');
     if (!apiKey) {
-        apiKey = prompt("Enter your Google Gemini API Key:");
-        if (apiKey) sessionStorage.setItem('gemini_api_key', apiKey);
-        else {
-            aiResponseContent.innerHTML = "API Key authentication missing.";
-            return;
-        }
+        aiResponseContent.innerHTML = "<span style='color:#ff4757;'>Please paste your Gemini API key at the top of this sidebar and click Save.</span>";
+        return;
     }
 
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: `I am looking at my textbook and don't understand this context or question. Please break down and explain: "${currentSelectedText}"` }] }]
+                contents: [{ parts: [{ text: `Act as a helpful tutor. Explain this concept clearly: "${currentSelectedText}"` }] }]
             })
         });
 
-        const data = await response.json();
+        const data = await res.json();
         if (data.error) throw new Error(data.error.message);
         
-        const answer = data.candidates[0].content.parts[0].text;
-        const formattedAnswer = answer.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        aiResponseContent.innerHTML = `<p>${formattedAnswer}</p>`;
-    } catch (error) {
-        aiResponseContent.innerHTML = `<span style="color: red;">Error processing request: ${error.message}</span>`;
-    }
-});
-
-// --- 5. INTERFACE UTILITIES ---
-libraryToggleBtn.addEventListener('click', () => libraryShelf.classList.toggle('open'));
-closeShelfBtn.addEventListener('click', () => libraryShelf.classList.remove('open'));
-closeSidebarBtn.addEventListener('click', () => sidebar.classList.remove('open'));
-
-// Fullscreen API Hook
-fullscreenBtn.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => console.log(err));
-    } else {
-        document.exitFullscreen();
+        let answer = data.candidates[0].content.parts[0].text;
+        answer = answer.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#fff;">$1</strong>');
+        aiResponseContent.innerHTML = `<p>${answer}</p>`;
+    } catch (err) {
+        aiResponseContent.innerHTML = `<span style="color:#ff4757;">API Error: ${err.message}</span>`;
     }
 });
